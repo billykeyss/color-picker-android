@@ -1,4 +1,4 @@
-package com.simplexlabs.colorpicker;
+package com.simplexlabs.colorpicker.components;
 
 import android.content.Context;
 import android.graphics.Canvas;
@@ -60,6 +60,13 @@ public class CircleView extends View {
         int cy = pt + (usableHeight / 2);
 
         paint.setColor(circleColor);
-        canvas.drawCircle(cx, cy, radius, paint);
+        Paint white = new Paint();
+        white.setColor(Color.WHITE);
+
+        white.setStrokeWidth( 3.0f );
+        white.setStyle( Paint.Style.STROKE );
+
+        canvas.drawCircle(cx, cy, radius-3, white);
+        canvas.drawCircle(cx, cy, radius-6, paint);
     }
 }

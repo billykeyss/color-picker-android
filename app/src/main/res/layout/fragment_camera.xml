@@ -23,16 +23,6 @@
         android:layout_alignParentBottom="true"
         android:layout_alignParentStart="true">
 
-        <Button
-            android:id="@+id/picture"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:text="@string/pause"
-            android:layout_alignTop="@+id/control"
-            android:layout_alignParentEnd="true"
-            android:layout_marginTop="32dp" />
-
         <TextView
             android:text="TextView"
             android:layout_width="wrap_content"
@@ -42,16 +32,33 @@
             android:layout_alignParentBottom="true"
             android:layout_centerHorizontal="true" />
 
-        <com.simplexlabs.colorpicker.CircleView
+        <Button
+            android:id="@+id/pause"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:text="@string/pause"
+            android:layout_alignParentTop="true"
+            android:layout_alignParentEnd="true" />
+
+        <Button
+            android:text="Show"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentBottom="true"
+            android:layout_alignParentEnd="true"
+            android:id="@+id/show" />
+
+        <com.simplexlabs.colorpicker.components.CircleView
             android:layout_width="50dp"
             android:layout_height="50dp"
             android:id="@+id/view"
-            android:layout_alignBottom="@+id/picture"
-            android:layout_centerHorizontal="true" />
+            android:layout_centerVertical="true"
+            android:layout_centerHorizontal="true"/>
 
     </RelativeLayout>
 
-    <com.simplexlabs.colorpicker.AutoFitTextureView
+    <com.simplexlabs.colorpicker.components.AutoFitTextureView
         android:id="@+id/texture"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

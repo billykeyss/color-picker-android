@@ -252,7 +252,7 @@ public class ColorUtils {
         }
     }
 
-    public class Color {
+    public class Color extends android.graphics.Color {
         private int r, g, b;
         private String hexCode;
 
@@ -293,6 +293,29 @@ public class ColorUtils {
 
         public int getColor() {
             return android.graphics.Color.rgb(r,g,b);
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+
+            Color color = (Color) o;
+
+            if (r != color.r) return false;
+            if (g != color.g) return false;
+            if (b != color.b) return false;
+            return hexCode != null ? hexCode.equals(color.hexCode) : color.hexCode == null;
+
+        }
+
+        @Override
+        public int hashCode() {
+            int result = r;
+            result = 31 * result + g;
+            result = 31 * result + b;
+            result = 31 * result + (hexCode != null ? hexCode.hashCode() : 0);
+            return result;
         }
     }
 }

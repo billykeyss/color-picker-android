@@ -1,4 +1,4 @@
-package com.simplexlabs.colorpicker;
+package com.simplexlabs.colorpicker.components;
 
 /**
  * Created by Bill on 2017-04-05.

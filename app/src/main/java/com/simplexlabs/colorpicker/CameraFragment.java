@@ -19,8 +19,6 @@ package com.simplexlabs.colorpicker;
 import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.app.Dialog;
-import android.app.DialogFragment;
 import android.app.Fragment;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -43,12 +41,13 @@ import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.CaptureResult;
 import android.hardware.camera2.TotalCaptureResult;
 import android.hardware.camera2.params.StreamConfigurationMap;
-import android.media.Image;
 import android.media.ImageReader;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.support.annotation.NonNull;
+import android.support.annotation.RequiresApi;
 import android.support.v13.app.FragmentCompat;
 import android.support.v4.content.ContextCompat;
 import android.util.Log;
@@ -59,19 +58,26 @@ import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ArrayAdapter;
 import android.widget.TextView;
 
+import com.simplexlabs.colorpicker.components.AutoFitTextureView;
+import com.simplexlabs.colorpicker.components.CircleView;
+import com.simplexlabs.colorpicker.components.ConfirmationDialog;
+import com.simplexlabs.colorpicker.components.ErrorDialog;
+import com.simplexlabs.colorpicker.helperClasses.CompareSizesByArea;
+import com.simplexlabs.colorpicker.helperClasses.ImageSaver;
 import com.simplexlabs.colorpicker.utils.ColorUtils;
+import com.simplexlabs.colorpicker.utils.Constants;
 
 import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
@@ -85,7 +91,6 @@ public class CameraFragment extends Fragment
      * Conversion from screen rotation to JPEG orientation.
      */
     private static final SparseIntArray ORIENTATIONS = new SparseIntArray();
-    private static final int REQUEST_CAMERA_PERMISSION = 1;
     private static final String FRAGMENT_DIALOG = "dialog";
 
     static {
@@ -95,45 +100,9 @@ public class CameraFragment extends Fragment
         ORIENTATIONS.append(Surface.ROTATION_270, 180);
     }
 
-    /**
-     * Tag for the {@link Log}.
-     */
-    private static final String TAG = "CameraFragment";
+    public AlertDialog.Builder builderSingle;
+    public ArrayAdapter<String> arrayAdapter;
 
-    /**
-     * Camera state: Showing camera preview.
-     */
-    private static final int STATE_PREVIEW = 0;
-
-    /**
-     * Camera state: Waiting for the focus to be locked.
-     */
-    private static final int STATE_WAITING_LOCK = 1;
-
-    /**
-     * Camera state: Waiting for the exposure to be precapture state.
-     */
-    private static final int STATE_WAITING_PRECAPTURE = 2;
-
-    /**
-     * Camera state: Waiting for the exposure state to be something other than precapture.
-     */
-    private static final int STATE_WAITING_NON_PRECAPTURE = 3;
-
-    /**
-     * Camera state: Picture was taken.
-     */
-    private static final int STATE_PICTURE_TAKEN = 4;
-
-    /**
-     * Max preview width that is guaranteed by Camera2 API
-     */
-    private static final int MAX_PREVIEW_WIDTH = 1920;
-
-    /**
-     * Max preview height that is guaranteed by Camera2 API
-     */
-    private static final int MAX_PREVIEW_HEIGHT = 1080;
 
     private boolean detectingColor = true;
 
@@ -141,6 +110,7 @@ public class CameraFragment extends Fragment
 
 
     private Renderer mRenderer;
+    private Integer counter = 0;
 
 
     /**
@@ -167,20 +137,59 @@ public class CameraFragment extends Fragment
 
         @Override
         public void onSurfaceTextureUpdated(SurfaceTexture texture) {
-            if(detectingColor) {
-                Bitmap bmp = mTextureView.getBitmap();
+            Bitmap bmp = mTextureView.getBitmap();
 
+            if (detectingColor) {
                 ColorUtils.Color color = getColorFromBitmap(bmp);
                 mView.setCircleColor(color.getColor());
 
-                if(System.currentTimeMillis() - lastTime > 1000) {
+                if (System.currentTimeMillis() - lastTime > 1000) {
                     lastTime = System.currentTimeMillis();
                     mTextView.setText(color.getHexCode() + "   " + color.getColorName());
+                }
+            } else {
+
+                showToast("" + counter, getActivity());
+                counter++;
+
+                if (System.currentTimeMillis() - lastTime > 1000) {
+                    HashMap<ColorUtils.Color, MutableInt> mostCommonColors = getCommonColorFromBitMap(bmp);
+
+                    Iterator it = mostCommonColors.entrySet().iterator();
+                    while (it.hasNext()) {
+                        Map.Entry pair = (Map.Entry) it.next();
+                        System.out.println(pair.getKey() + " = " + pair.getValue());
+                        it.remove(); // avoids a ConcurrentModificationException
+                    }
                 }
             }
         }
 
     };
+
+    @RequiresApi(api = Build.VERSION_CODES.N)
+    private HashMap<ColorUtils.Color, MutableInt> getCommonColorFromBitMap(Bitmap bmp) {
+        HashMap<ColorUtils.Color, MutableInt> commonColors = new HashMap<>();
+
+        for (int y = 0; y < bmp.getHeight(); y += 10) {
+            for (int x = 0; x < bmp.getWidth(); x += 10) {
+                int c = bmp.getPixel(x, y);
+
+                ColorUtils.Color tempColor = new ColorUtils().new Color(Color.red(c), Color.green(c), Color.blue(c));
+
+                if (commonColors.get(tempColor) != null) {
+                    MutableInt count = commonColors.get(tempColor);
+                    count.increment();
+                } else {
+                    commonColors.put(tempColor, new MutableInt());
+                }
+            }
+        }
+
+        commonColors.entrySet().removeIf(e -> e.getValue().get() < 30);
+
+        return commonColors;
+    }
 
     private ColorUtils.Color getColorFromBitmap(Bitmap bmp) {
         int redBucket = 0;
@@ -188,13 +197,11 @@ public class CameraFragment extends Fragment
         int blueBucket = 0;
         int pixelCount = 0;
 
-        int middlex = bmp.getWidth()/2;
-        int middley = bmp.getHeight()/2;
+        int middlex = bmp.getWidth() / 2;
+        int middley = bmp.getHeight() / 2;
 
-        for (int y = middlex - 5; y < middlex + 5; y++)
-        {
-            for (int x = middley - 5; x < middley + 5; x++)
-            {
+        for (int y = middlex - 5; y < middlex + 5; y++) {
+            for (int x = middley - 5; x < middley + 5; x++) {
                 int c = bmp.getPixel(x, y);
 
                 pixelCount++;
@@ -205,9 +212,9 @@ public class CameraFragment extends Fragment
             }
         }
 
-        redBucket = redBucket/pixelCount;
-        greenBucket = greenBucket/pixelCount;
-        blueBucket = blueBucket/pixelCount;
+        redBucket = redBucket / pixelCount;
+        greenBucket = greenBucket / pixelCount;
+        blueBucket = blueBucket / pixelCount;
 
         return new ColorUtils().new Color(redBucket, greenBucket, blueBucket);
     }
@@ -305,7 +312,6 @@ public class CameraFragment extends Fragment
         public void onImageAvailable(ImageReader reader) {
             mBackgroundHandler.post(new ImageSaver(reader.acquireNextImage(), mFile));
         }
-
     };
 
     /**
@@ -323,7 +329,7 @@ public class CameraFragment extends Fragment
      *
      * @see #mCaptureCallback
      */
-    private int mState = STATE_PREVIEW;
+    private int mState = Constants.STATE_PREVIEW;
 
     /**
      * A {@link Semaphore} to prevent the app from exiting before closing the camera.
@@ -348,11 +354,11 @@ public class CameraFragment extends Fragment
 
         private void process(CaptureResult result) {
             switch (mState) {
-                case STATE_PREVIEW: {
+                case Constants.STATE_PREVIEW: {
                     // We have nothing to do when the camera preview is working normally.
                     break;
                 }
-                case STATE_WAITING_LOCK: {
+                case Constants.STATE_WAITING_LOCK: {
                     Integer afState = result.get(CaptureResult.CONTROL_AF_STATE);
                     if (afState == null) {
                         captureStillPicture();
@@ -362,7 +368,7 @@ public class CameraFragment extends Fragment
                         Integer aeState = result.get(CaptureResult.CONTROL_AE_STATE);
                         if (aeState == null ||
                                 aeState == CaptureResult.CONTROL_AE_STATE_CONVERGED) {
-                            mState = STATE_PICTURE_TAKEN;
+                            mState = Constants.STATE_PICTURE_TAKEN;
                             captureStillPicture();
                         } else {
                             runPrecaptureSequence();
@@ -370,21 +376,21 @@ public class CameraFragment extends Fragment
                     }
                     break;
                 }
-                case STATE_WAITING_PRECAPTURE: {
+                case Constants.STATE_WAITING_PRECAPTURE: {
                     // CONTROL_AE_STATE can be null on some devices
                     Integer aeState = result.get(CaptureResult.CONTROL_AE_STATE);
                     if (aeState == null ||
                             aeState == CaptureResult.CONTROL_AE_STATE_PRECAPTURE ||
                             aeState == CaptureRequest.CONTROL_AE_STATE_FLASH_REQUIRED) {
-                        mState = STATE_WAITING_NON_PRECAPTURE;
+                        mState = Constants.STATE_WAITING_NON_PRECAPTURE;
                     }
                     break;
                 }
-                case STATE_WAITING_NON_PRECAPTURE: {
+                case Constants.STATE_WAITING_NON_PRECAPTURE: {
                     // CONTROL_AE_STATE can be null on some devices
                     Integer aeState = result.get(CaptureResult.CONTROL_AE_STATE);
                     if (aeState == null || aeState != CaptureResult.CONTROL_AE_STATE_PRECAPTURE) {
-                        mState = STATE_PICTURE_TAKEN;
+                        mState = Constants.STATE_PICTURE_TAKEN;
                         captureStillPicture();
                     }
                     break;
@@ -452,7 +458,7 @@ public class CameraFragment extends Fragment
         } else if (notBigEnough.size() > 0) {
             return Collections.max(notBigEnough, new CompareSizesByArea());
         } else {
-            Log.e(TAG, "Couldn't find any suitable preview size");
+            Log.e(Constants.TAG, "Couldn't find any suitable preview size");
             return choices[0];
         }
     }
@@ -469,7 +475,8 @@ public class CameraFragment extends Fragment
 
     @Override
     public void onViewCreated(final View view, Bundle savedInstanceState) {
-        view.findViewById(R.id.picture).setOnClickListener(this);
+        view.findViewById(R.id.pause).setOnClickListener(this);
+        view.findViewById(R.id.show).setOnClickListener(this);
         mTextureView = (AutoFitTextureView) view.findViewById(R.id.texture);
         mView = (CircleView) view.findViewById(R.id.view);
         mTextView = (TextView) view.findViewById(R.id.textView);
@@ -479,6 +486,53 @@ public class CameraFragment extends Fragment
         mRenderer.start();
         mTextureView.setSurfaceTextureListener(mRenderer);
 
+        builderSingle = new AlertDialog.Builder(getActivity());
+        builderSingle.setTitle("All colors in frame:");
+
+        arrayAdapter = new ArrayAdapter<String>(getActivity(), android.R.layout.select_dialog_item);
+        updateArrayAdapter();
+
+
+    }
+
+    private void updateArrayAdapter() {
+        arrayAdapter.clear();
+
+        Bitmap bmp = mTextureView.getBitmap();
+
+        if (bmp == null) {
+            return;
+        }
+
+        HashMap<ColorUtils.Color, MutableInt> mostCommonColors = getCommonColorFromBitMap(bmp);
+
+        for (Map.Entry<ColorUtils.Color, MutableInt> entry : mostCommonColors.entrySet()) {
+            arrayAdapter.add(entry.getKey().getHexCode());
+        }
+
+        builderSingle.setNegativeButton("cancel", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                dialog.dismiss();
+            }
+        });
+
+        builderSingle.setAdapter(arrayAdapter, new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                String strName = arrayAdapter.getItem(which);
+                AlertDialog.Builder builderInner = new AlertDialog.Builder(getActivity());
+                builderInner.setMessage(strName);
+                builderInner.setTitle("Your Selected Item is");
+                builderInner.setPositiveButton("Ok", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        dialog.dismiss();
+                    }
+                });
+                builderInner.show();
+            }
+        });
     }
 
     @Override
@@ -520,14 +574,14 @@ public class CameraFragment extends Fragment
             new ConfirmationDialog().show(getChildFragmentManager(), FRAGMENT_DIALOG);
         } else {
             FragmentCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA},
-                    REQUEST_CAMERA_PERMISSION);
+                    Constants.REQUEST_CAMERA_PERMISSION);
         }
     }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
                                            @NonNull int[] grantResults) {
-        if (requestCode == REQUEST_CAMERA_PERMISSION) {
+        if (requestCode == Constants.REQUEST_CAMERA_PERMISSION) {
             if (grantResults.length != 1 || grantResults[0] != PackageManager.PERMISSION_GRANTED) {
                 ErrorDialog.newInstance(getString(R.string.request_permission))
                         .show(getChildFragmentManager(), FRAGMENT_DIALOG);
@@ -592,7 +646,7 @@ public class CameraFragment extends Fragment
                         }
                         break;
                     default:
-                        Log.e(TAG, "Display rotation is invalid: " + displayRotation);
+                        Log.e(Constants.TAG, "Display rotation is invalid: " + displayRotation);
                 }
 
                 Point displaySize = new Point();
@@ -609,12 +663,12 @@ public class CameraFragment extends Fragment
                     maxPreviewHeight = displaySize.x;
                 }
 
-                if (maxPreviewWidth > MAX_PREVIEW_WIDTH) {
-                    maxPreviewWidth = MAX_PREVIEW_WIDTH;
+                if (maxPreviewWidth > Constants.MAX_PREVIEW_WIDTH) {
+                    maxPreviewWidth = Constants.MAX_PREVIEW_WIDTH;
                 }
 
-                if (maxPreviewHeight > MAX_PREVIEW_HEIGHT) {
-                    maxPreviewHeight = MAX_PREVIEW_HEIGHT;
+                if (maxPreviewHeight > Constants.MAX_PREVIEW_HEIGHT) {
+                    maxPreviewHeight = Constants.MAX_PREVIEW_HEIGHT;
                 }
 
                 // Danger, W.R.! Attempting to use too large a preview size could  exceed the camera
@@ -833,7 +887,7 @@ public class CameraFragment extends Fragment
             mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER,
                     CameraMetadata.CONTROL_AF_TRIGGER_START);
             // Tell #mCaptureCallback to wait for the lock.
-            mState = STATE_WAITING_LOCK;
+            mState = Constants.STATE_WAITING_LOCK;
             mCaptureSession.capture(mPreviewRequestBuilder.build(), mCaptureCallback,
                     mBackgroundHandler);
         } catch (CameraAccessException e) {
@@ -851,7 +905,7 @@ public class CameraFragment extends Fragment
             mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER,
                     CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER_START);
             // Tell #mCaptureCallback to wait for the precapture sequence to be set.
-            mState = STATE_WAITING_PRECAPTURE;
+            mState = Constants.STATE_WAITING_PRECAPTURE;
             mCaptureSession.capture(mPreviewRequestBuilder.build(), mCaptureCallback,
                     mBackgroundHandler);
         } catch (CameraAccessException e) {
@@ -891,7 +945,7 @@ public class CameraFragment extends Fragment
                                                @NonNull CaptureRequest request,
                                                @NonNull TotalCaptureResult result) {
                     showToast("Saved: " + mFile, getActivity());
-                    Log.d(TAG, mFile.toString());
+                    Log.d(Constants.TAG, mFile.toString());
                     unlockFocus();
                 }
             };
@@ -930,7 +984,7 @@ public class CameraFragment extends Fragment
             mCaptureSession.capture(mPreviewRequestBuilder.build(), mCaptureCallback,
                     mBackgroundHandler);
             // After this, the camera will go back to the normal state of preview.
-            mState = STATE_PREVIEW;
+            mState = Constants.STATE_PREVIEW;
             mCaptureSession.setRepeatingRequest(mPreviewRequest, mCaptureCallback,
                     mBackgroundHandler);
         } catch (CameraAccessException e) {
@@ -941,9 +995,20 @@ public class CameraFragment extends Fragment
     @Override
     public void onClick(View view) {
         switch (view.getId()) {
-            case R.id.picture: {
+            case R.id.pause: {
 //                takePicture();
                 detectingColor = !detectingColor;
+                if (detectingColor) {
+                    openCamera(mTextureView.getWidth(), mTextureView.getHeight());
+                } else {
+                    closeCamera();
+                }
+
+                break;
+            }
+            case R.id.show: {
+                updateArrayAdapter();
+                builderSingle.show();
                 break;
             }
             default: {
@@ -959,124 +1024,15 @@ public class CameraFragment extends Fragment
         }
     }
 
-    /**
-     * Saves a JPEG {@link Image} into the specified {@link File}.
-     */
-    private static class ImageSaver implements Runnable {
+    public class MutableInt {
+        int value = 1; // note that we start at 1 since we're counting
 
-        /**
-         * The JPEG image
-         */
-        private final Image mImage;
-        /**
-         * The file we save the image into.
-         */
-        private final File mFile;
-
-        public ImageSaver(Image image, File file) {
-            mImage = image;
-            mFile = file;
+        public void increment() {
+            ++value;
         }
 
-        @Override
-        public void run() {
-            ByteBuffer buffer = mImage.getPlanes()[0].getBuffer();
-            byte[] bytes = new byte[buffer.remaining()];
-            buffer.get(bytes);
-            FileOutputStream output = null;
-            try {
-                output = new FileOutputStream(mFile);
-                output.write(bytes);
-            } catch (IOException e) {
-                e.printStackTrace();
-            } finally {
-                mImage.close();
-                if (null != output) {
-                    try {
-                        output.close();
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
-        }
-
-    }
-
-    /**
-     * Compares two {@code Size}s based on their areas.
-     */
-    static class CompareSizesByArea implements Comparator<Size> {
-
-        @Override
-        public int compare(Size lhs, Size rhs) {
-            // We cast here to ensure the multiplications won't overflow
-            return Long.signum((long) lhs.getWidth() * lhs.getHeight() -
-                    (long) rhs.getWidth() * rhs.getHeight());
-        }
-
-    }
-
-    /**
-     * Shows an error message dialog.
-     */
-    public static class ErrorDialog extends DialogFragment {
-
-        private static final String ARG_MESSAGE = "message";
-
-        public static ErrorDialog newInstance(String message) {
-            ErrorDialog dialog = new ErrorDialog();
-            Bundle args = new Bundle();
-            args.putString(ARG_MESSAGE, message);
-            dialog.setArguments(args);
-            return dialog;
-        }
-
-        @Override
-        public Dialog onCreateDialog(Bundle savedInstanceState) {
-            final Activity activity = getActivity();
-            return new AlertDialog.Builder(activity)
-                    .setMessage(getArguments().getString(ARG_MESSAGE))
-                    .setPositiveButton(android.R.string.ok, new DialogInterface.OnClickListener() {
-                        @Override
-                        public void onClick(DialogInterface dialogInterface, int i) {
-                            activity.finish();
-                        }
-                    })
-                    .create();
-        }
-
-    }
-
-    /**
-     * Shows OK/Cancel confirmation dialog about camera permission.
-     */
-    public static class ConfirmationDialog extends DialogFragment {
-
-        @Override
-        public Dialog onCreateDialog(Bundle savedInstanceState) {
-            final Fragment parent = getParentFragment();
-            return new AlertDialog.Builder(getActivity())
-                    .setMessage(R.string.request_permission)
-                    .setPositiveButton(android.R.string.ok, new DialogInterface.OnClickListener() {
-                        @Override
-                        public void onClick(DialogInterface dialog, int which) {
-                            FragmentCompat.requestPermissions(parent,
-                                    new String[]{Manifest.permission.CAMERA},
-                                    REQUEST_CAMERA_PERMISSION);
-                        }
-                    })
-                    .setNegativeButton(android.R.string.cancel,
-                            new DialogInterface.OnClickListener() {
-                                @Override
-                                public void onClick(DialogInterface dialog, int which) {
-                                    Activity activity = parent.getActivity();
-                                    if (activity != null) {
-                                        activity.finish();
-                                    }
-                                }
-                            })
-                    .create();
+        public int get() {
+            return value;
         }
     }
 
