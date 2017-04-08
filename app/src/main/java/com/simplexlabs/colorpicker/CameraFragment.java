@@ -21,7 +21,6 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.Fragment;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
@@ -65,6 +64,7 @@ import com.simplexlabs.colorpicker.components.AutoFitTextureView;
 import com.simplexlabs.colorpicker.components.CircleView;
 import com.simplexlabs.colorpicker.components.ConfirmationDialog;
 import com.simplexlabs.colorpicker.components.ErrorDialog;
+import com.simplexlabs.colorpicker.helperClasses.ColorModel;
 import com.simplexlabs.colorpicker.helperClasses.CompareSizesByArea;
 import com.simplexlabs.colorpicker.helperClasses.ImageSaver;
 import com.simplexlabs.colorpicker.utils.ColorUtils;
@@ -75,9 +75,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
@@ -112,6 +110,8 @@ public class CameraFragment extends Fragment
     private Renderer mRenderer;
     private Integer counter = 0;
 
+    HashMap<ColorModel, MutableInt> mostCommonColors = new HashMap<>();
+
 
     /**
      * {@link TextureView.SurfaceTextureListener} handles several lifecycle events on a
@@ -140,42 +140,30 @@ public class CameraFragment extends Fragment
             Bitmap bmp = mTextureView.getBitmap();
 
             if (detectingColor) {
-                ColorUtils.Color color = getColorFromBitmap(bmp);
+                ColorModel color = getColorFromBitmap(bmp);
                 mView.setCircleColor(color.getColor());
 
                 if (System.currentTimeMillis() - lastTime > 1000) {
                     lastTime = System.currentTimeMillis();
                     mTextView.setText(color.getHexCode() + "   " + color.getColorName());
                 }
-            } else {
-
-                showToast("" + counter, getActivity());
-                counter++;
-
-                if (System.currentTimeMillis() - lastTime > 1000) {
-                    HashMap<ColorUtils.Color, MutableInt> mostCommonColors = getCommonColorFromBitMap(bmp);
-
-                    Iterator it = mostCommonColors.entrySet().iterator();
-                    while (it.hasNext()) {
-                        Map.Entry pair = (Map.Entry) it.next();
-                        System.out.println(pair.getKey() + " = " + pair.getValue());
-                        it.remove(); // avoids a ConcurrentModificationException
-                    }
-                }
             }
         }
-
     };
 
-    @RequiresApi(api = Build.VERSION_CODES.N)
-    private HashMap<ColorUtils.Color, MutableInt> getCommonColorFromBitMap(Bitmap bmp) {
-        HashMap<ColorUtils.Color, MutableInt> commonColors = new HashMap<>();
+    public HashMap<ColorModel, MutableInt> getMostCommonColors() {
+        return mostCommonColors;
+    }
 
-        for (int y = 0; y < bmp.getHeight(); y += 10) {
-            for (int x = 0; x < bmp.getWidth(); x += 10) {
+    @RequiresApi(api = Build.VERSION_CODES.N)
+    private HashMap<ColorModel, MutableInt> getCommonColorFromBitMap(Bitmap bmp) {
+        HashMap<ColorModel, MutableInt> commonColors = new HashMap<>();
+
+        for (int y = (int) Math.round(bmp.getHeight() * 0.2); y <  (int) Math.round(bmp.getHeight() * 0.8) ; y += 5) {
+            for (int x = (int) Math.round(bmp.getWidth() * 0.2); x <  (int) Math.round(bmp.getWidth() * 0.8) ; x += 5) {
                 int c = bmp.getPixel(x, y);
 
-                ColorUtils.Color tempColor = new ColorUtils().new Color(Color.red(c), Color.green(c), Color.blue(c));
+                ColorModel tempColor = new ColorModel(new ColorUtils(), Color.red(c), Color.green(c), Color.blue(c));
 
                 if (commonColors.get(tempColor) != null) {
                     MutableInt count = commonColors.get(tempColor);
@@ -186,12 +174,12 @@ public class CameraFragment extends Fragment
             }
         }
 
-        commonColors.entrySet().removeIf(e -> e.getValue().get() < 30);
+        commonColors.entrySet().removeIf(e -> e.getValue().get() < 15);
 
         return commonColors;
     }
 
-    private ColorUtils.Color getColorFromBitmap(Bitmap bmp) {
+    private ColorModel getColorFromBitmap(Bitmap bmp) {
         int redBucket = 0;
         int greenBucket = 0;
         int blueBucket = 0;
@@ -216,7 +204,7 @@ public class CameraFragment extends Fragment
         greenBucket = greenBucket / pixelCount;
         blueBucket = blueBucket / pixelCount;
 
-        return new ColorUtils().new Color(redBucket, greenBucket, blueBucket);
+        return new ColorModel(new ColorUtils(), redBucket, greenBucket, blueBucket);
     }
 
     /**
@@ -485,54 +473,6 @@ public class CameraFragment extends Fragment
         mRenderer = new Renderer();
         mRenderer.start();
         mTextureView.setSurfaceTextureListener(mRenderer);
-
-        builderSingle = new AlertDialog.Builder(getActivity());
-        builderSingle.setTitle("All colors in frame:");
-
-        arrayAdapter = new ArrayAdapter<String>(getActivity(), android.R.layout.select_dialog_item);
-        updateArrayAdapter();
-
-
-    }
-
-    private void updateArrayAdapter() {
-        arrayAdapter.clear();
-
-        Bitmap bmp = mTextureView.getBitmap();
-
-        if (bmp == null) {
-            return;
-        }
-
-        HashMap<ColorUtils.Color, MutableInt> mostCommonColors = getCommonColorFromBitMap(bmp);
-
-        for (Map.Entry<ColorUtils.Color, MutableInt> entry : mostCommonColors.entrySet()) {
-            arrayAdapter.add(entry.getKey().getHexCode());
-        }
-
-        builderSingle.setNegativeButton("cancel", new DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(DialogInterface dialog, int which) {
-                dialog.dismiss();
-            }
-        });
-
-        builderSingle.setAdapter(arrayAdapter, new DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(DialogInterface dialog, int which) {
-                String strName = arrayAdapter.getItem(which);
-                AlertDialog.Builder builderInner = new AlertDialog.Builder(getActivity());
-                builderInner.setMessage(strName);
-                builderInner.setTitle("Your Selected Item is");
-                builderInner.setPositiveButton("Ok", new DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(DialogInterface dialog, int which) {
-                        dialog.dismiss();
-                    }
-                });
-                builderInner.show();
-            }
-        });
     }
 
     @Override
@@ -590,6 +530,7 @@ public class CameraFragment extends Fragment
             super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         }
     }
+
 
     /**
      * Sets up member variables related to camera.
@@ -709,6 +650,8 @@ public class CameraFragment extends Fragment
      * Opens the camera specified by {@link CameraFragment#mCameraId}.
      */
     private void openCamera(int width, int height) {
+        detectingColor = true;
+
         if (ContextCompat.checkSelfPermission(getActivity(), Manifest.permission.CAMERA)
                 != PackageManager.PERMISSION_GRANTED) {
             requestCameraPermission();
@@ -734,6 +677,8 @@ public class CameraFragment extends Fragment
      * Closes the current {@link CameraDevice}.
      */
     private void closeCamera() {
+        detectingColor = false;
+
         try {
             mCameraOpenCloseLock.acquire();
             if (null != mCaptureSession) {
@@ -1007,8 +952,12 @@ public class CameraFragment extends Fragment
                 break;
             }
             case R.id.show: {
-                updateArrayAdapter();
-                builderSingle.show();
+                Bitmap bmp = mTextureView.getBitmap();
+                if (bmp == null) {
+                    break;
+                }
+                mostCommonColors = getCommonColorFromBitMap(bmp);
+                ((MainActivity) getActivity()).updateListView(mostCommonColors);
                 break;
             }
             default: {

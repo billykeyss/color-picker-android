@@ -6,6 +6,8 @@ package com.simplexlabs.colorpicker.utils;
 
 import android.graphics.Color;
 
+import com.simplexlabs.colorpicker.helperClasses.ColorModel;
+
 import java.util.ArrayList;
 
 /**
@@ -197,8 +199,8 @@ public class ColorUtils {
     /**
      * Convert Hex Code to RGB
      */
-    public Color getColorObjectFromHexCode(String colorStr) {
-        return new Color(
+    public ColorModel getColorObjectFromHexCode(String colorStr) {
+        return new ColorModel(this,
                 Integer.valueOf( colorStr.substring( 1, 3 ), 16 ),
                 Integer.valueOf( colorStr.substring( 3, 5 ), 16 ),
                 Integer.valueOf( colorStr.substring( 5, 7 ), 16 ) );
@@ -252,70 +254,4 @@ public class ColorUtils {
         }
     }
 
-    public class Color extends android.graphics.Color {
-        private int r, g, b;
-        private String hexCode;
-
-        public Color(int r, int g, int b) {
-            this.r = r;
-            this.g = g;
-            this.b = b;
-            this.hexCode = getHexCodeFromRGB(r, g, b);
-        }
-
-        public Color(String hexCode) {
-            Color color = getColorObjectFromHexCode(hexCode);
-            this.r = color.r;
-            this.g = color.g;
-            this.b = color.b;
-            this.hexCode = hexCode;
-        }
-
-        public String getColorName() {
-            return getColorNameFromRgb(r,g,b);
-        }
-
-        public int getR() {
-            return r;
-        }
-
-        public int getG() {
-            return g;
-        }
-
-        public int getB() {
-            return b;
-        }
-
-        public String getHexCode() {
-            return hexCode;
-        }
-
-        public int getColor() {
-            return android.graphics.Color.rgb(r,g,b);
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-
-            Color color = (Color) o;
-
-            if (r != color.r) return false;
-            if (g != color.g) return false;
-            if (b != color.b) return false;
-            return hexCode != null ? hexCode.equals(color.hexCode) : color.hexCode == null;
-
-        }
-
-        @Override
-        public int hashCode() {
-            int result = r;
-            result = 31 * result + g;
-            result = 31 * result + b;
-            result = 31 * result + (hexCode != null ? hexCode.hashCode() : 0);
-            return result;
-        }
-    }
 }

@@ -63,10 +63,10 @@ public class CircleView extends View {
         Paint white = new Paint();
         white.setColor(Color.WHITE);
 
-        white.setStrokeWidth( 3.0f );
-        white.setStyle( Paint.Style.STROKE );
+        white.setStrokeWidth(3.0f);
+        white.setStyle(Paint.Style.STROKE);
 
-        canvas.drawCircle(cx, cy, radius-3, white);
-        canvas.drawCircle(cx, cy, radius-6, paint);
+        canvas.drawCircle(cx, cy, radius - 3, white);
+        canvas.drawCircle(cx, cy, radius - 6, paint);
     }
 }
