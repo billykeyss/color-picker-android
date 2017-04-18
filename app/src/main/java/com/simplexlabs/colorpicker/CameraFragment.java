@@ -18,7 +18,6 @@ package com.simplexlabs.colorpicker;
 
 import android.Manifest;
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.app.Fragment;
 import android.content.Context;
 import android.content.pm.PackageManager;
@@ -41,8 +40,10 @@ import android.hardware.camera2.CaptureResult;
 import android.hardware.camera2.TotalCaptureResult;
 import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.ImageReader;
+import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.support.annotation.NonNull;
@@ -57,13 +58,15 @@ import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.ArrayAdapter;
+import android.widget.Button;
 import android.widget.TextView;
 
+import com.hamza.slidingsquaresloaderview.SlidingSquareLoaderView;
 import com.simplexlabs.colorpicker.components.AutoFitTextureView;
 import com.simplexlabs.colorpicker.components.CircleView;
 import com.simplexlabs.colorpicker.components.ConfirmationDialog;
 import com.simplexlabs.colorpicker.components.ErrorDialog;
+import com.simplexlabs.colorpicker.components.OverlayView;
 import com.simplexlabs.colorpicker.helperClasses.ColorModel;
 import com.simplexlabs.colorpicker.helperClasses.CompareSizesByArea;
 import com.simplexlabs.colorpicker.helperClasses.ImageSaver;
@@ -71,14 +74,20 @@ import com.simplexlabs.colorpicker.utils.ColorUtils;
 import com.simplexlabs.colorpicker.utils.Constants;
 
 import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
+import static com.simplexlabs.colorpicker.utils.Constants.TAG;
 import static com.simplexlabs.colorpicker.utils.HelperUtils.showToast;
 
 
@@ -98,17 +107,15 @@ public class CameraFragment extends Fragment
         ORIENTATIONS.append(Surface.ROTATION_270, 180);
     }
 
-    public AlertDialog.Builder builderSingle;
-    public ArrayAdapter<String> arrayAdapter;
+    private OverlayView overlayView;
+    private Button pauseButton;
+    private static SlidingSquareLoaderView slidingSquareLoaderView;
 
+    private ColorUtils colorUtils = new ColorUtils();
 
     private boolean detectingColor = true;
 
     private long lastTime = System.currentTimeMillis();
-
-
-    private Renderer mRenderer;
-    private Integer counter = 0;
 
     HashMap<ColorModel, MutableInt> mostCommonColors = new HashMap<>();
 
@@ -145,7 +152,8 @@ public class CameraFragment extends Fragment
 
                 if (System.currentTimeMillis() - lastTime > 1000) {
                     lastTime = System.currentTimeMillis();
-                    mTextView.setText(color.getHexCode() + "   " + color.getColorName());
+                    String colorName = color.getColorName().replaceAll("(\\p{Ll})(\\p{Lu})", "$1 $2");
+                    mColorNameAndHexCode.setText(color.getHexCode().toUpperCase() + "   " + colorName);
                 }
             }
         }
@@ -159,11 +167,11 @@ public class CameraFragment extends Fragment
     private HashMap<ColorModel, MutableInt> getCommonColorFromBitMap(Bitmap bmp) {
         HashMap<ColorModel, MutableInt> commonColors = new HashMap<>();
 
-        for (int y = (int) Math.round(bmp.getHeight() * 0.2); y <  (int) Math.round(bmp.getHeight() * 0.8) ; y += 5) {
-            for (int x = (int) Math.round(bmp.getWidth() * 0.2); x <  (int) Math.round(bmp.getWidth() * 0.8) ; x += 5) {
+        for (int y = (int) Math.round(bmp.getHeight() * 0.2); y < (int) Math.round(bmp.getHeight() * 0.8); y += 2) {
+            for (int x = (int) Math.round(bmp.getWidth() * 0.2); x < (int) Math.round(bmp.getWidth() * 0.8); x += 2) {
                 int c = bmp.getPixel(x, y);
 
-                ColorModel tempColor = new ColorModel(new ColorUtils(), Color.red(c), Color.green(c), Color.blue(c));
+                ColorModel tempColor = new ColorModel(colorUtils, Color.red(c), Color.green(c), Color.blue(c));
 
                 if (commonColors.get(tempColor) != null) {
                     MutableInt count = commonColors.get(tempColor);
@@ -185,18 +193,20 @@ public class CameraFragment extends Fragment
         int blueBucket = 0;
         int pixelCount = 0;
 
-        int middlex = bmp.getWidth() / 2;
-        int middley = bmp.getHeight() / 2;
+        float left = overlayView.getLeft() + (overlayView.getRight() - overlayView.getLeft()) / 2 - 5;
+        float top = overlayView.getTop() + (overlayView.getBottom() - overlayView.getTop()) / 2 - 5; // basically (X1, Y1)
 
-        for (int y = middlex - 5; y < middlex + 5; y++) {
-            for (int x = middley - 5; x < middley + 5; x++) {
+        float right = left + 10; // width (distance from X1 to X2)
+        float bottom = top + 10;
+
+        for (int y = (int) left; y < right; y++) {
+            for (int x = (int) top; x < bottom; x++) {
                 int c = bmp.getPixel(x, y);
 
                 pixelCount++;
                 redBucket += Color.red(c);
                 greenBucket += Color.green(c);
                 blueBucket += Color.blue(c);
-                // does alpha matter?
             }
         }
 
@@ -204,7 +214,7 @@ public class CameraFragment extends Fragment
         greenBucket = greenBucket / pixelCount;
         blueBucket = blueBucket / pixelCount;
 
-        return new ColorModel(new ColorUtils(), redBucket, greenBucket, blueBucket);
+        return new ColorModel(colorUtils, redBucket, greenBucket, blueBucket);
     }
 
     /**
@@ -218,7 +228,7 @@ public class CameraFragment extends Fragment
     private AutoFitTextureView mTextureView;
 
     private CircleView mView;
-    private TextView mTextView;
+    private TextView mColorNameAndHexCode;
 
     /**
      * A {@link CameraCaptureSession } for camera preview.
@@ -446,7 +456,7 @@ public class CameraFragment extends Fragment
         } else if (notBigEnough.size() > 0) {
             return Collections.max(notBigEnough, new CompareSizesByArea());
         } else {
-            Log.e(Constants.TAG, "Couldn't find any suitable preview size");
+            Log.e(TAG, "Couldn't find any suitable preview size");
             return choices[0];
         }
     }
@@ -465,14 +475,14 @@ public class CameraFragment extends Fragment
     public void onViewCreated(final View view, Bundle savedInstanceState) {
         view.findViewById(R.id.pause).setOnClickListener(this);
         view.findViewById(R.id.show).setOnClickListener(this);
+
         mTextureView = (AutoFitTextureView) view.findViewById(R.id.texture);
         mView = (CircleView) view.findViewById(R.id.view);
-        mTextView = (TextView) view.findViewById(R.id.textView);
-
-        // Start up the Renderer thread.  It'll sleep until the TextureView is ready.
-        mRenderer = new Renderer();
-        mRenderer.start();
-        mTextureView.setSurfaceTextureListener(mRenderer);
+        mColorNameAndHexCode = (TextView) view.findViewById(R.id.colorNameAndHexCode);
+        overlayView = (OverlayView) view.findViewById(R.id.overLayView);
+        pauseButton = (Button) view.findViewById(R.id.pause);
+        slidingSquareLoaderView = (SlidingSquareLoaderView) view.findViewById(R.id.loader);
+        slidingSquareLoaderView.setVisibility(View.INVISIBLE);
     }
 
     @Override
@@ -500,13 +510,58 @@ public class CameraFragment extends Fragment
     public void onPause() {
         closeCamera();
         stopBackgroundThread();
-        mRenderer.halt();
         super.onPause();
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
+    }
+
+    public static void resetLoading() {
+        slidingSquareLoaderView.setVisibility(View.INVISIBLE);
+        slidingSquareLoaderView.stop();
+    }
+
+    @Override
+    public void onClick(View view) {
+        switch (view.getId()) {
+            case R.id.pause: {
+//                takePicture();
+                detectingColor = !detectingColor;
+                if (detectingColor) {
+                    openCamera(mTextureView.getWidth(), mTextureView.getHeight());
+                    pauseButton.setText("Pause");
+                } else {
+                    closeCamera();
+                    pauseButton.setText("Resume");
+                }
+//                try {
+////                    storeImage(mTextureView.getBitmap());
+//                    Log.d("SAVEFILE", "SAVEFILE");
+//                } catch (IOException e) {
+//                    e.printStackTrace();
+//                }
+                break;
+            }
+            case R.id.show: {
+                slidingSquareLoaderView.setColor(colorUtils.randomColor());
+                slidingSquareLoaderView.setVisibility(View.VISIBLE);
+                slidingSquareLoaderView.start();
+                Bitmap bmp = mTextureView.getBitmap();
+                if (bmp == null) break;
+
+
+                AsyncTask.execute(() -> {
+                    mostCommonColors = getCommonColorFromBitMap(bmp);
+                    ((MainActivity) getActivity()).updateListView(mostCommonColors);
+                });
+                break;
+            }
+            default: {
+                break;
+            }
+        }
     }
 
     private void requestCameraPermission() {
@@ -587,7 +642,7 @@ public class CameraFragment extends Fragment
                         }
                         break;
                     default:
-                        Log.e(Constants.TAG, "Display rotation is invalid: " + displayRotation);
+                        Log.e(TAG, "Display rotation is invalid: " + displayRotation);
                 }
 
                 Point displaySize = new Point();
@@ -890,7 +945,7 @@ public class CameraFragment extends Fragment
                                                @NonNull CaptureRequest request,
                                                @NonNull TotalCaptureResult result) {
                     showToast("Saved: " + mFile, getActivity());
-                    Log.d(Constants.TAG, mFile.toString());
+                    Log.d(TAG, mFile.toString());
                     unlockFocus();
                 }
             };
@@ -937,33 +992,51 @@ public class CameraFragment extends Fragment
         }
     }
 
-    @Override
-    public void onClick(View view) {
-        switch (view.getId()) {
-            case R.id.pause: {
-//                takePicture();
-                detectingColor = !detectingColor;
-                if (detectingColor) {
-                    openCamera(mTextureView.getWidth(), mTextureView.getHeight());
-                } else {
-                    closeCamera();
-                }
 
-                break;
-            }
-            case R.id.show: {
-                Bitmap bmp = mTextureView.getBitmap();
-                if (bmp == null) {
-                    break;
-                }
-                mostCommonColors = getCommonColorFromBitMap(bmp);
-                ((MainActivity) getActivity()).updateListView(mostCommonColors);
-                break;
-            }
-            default: {
-                break;
+    private void storeImage(Bitmap image) throws IOException {
+        File pictureFile = getOutputMediaFile();
+        if (pictureFile == null) {
+            Log.d(TAG,
+                    "Error creating media file, check storage permissions: ");// e.getMessage());
+            return;
+        }
+        try {
+            FileOutputStream fos = new FileOutputStream(pictureFile);
+            image.compress(Bitmap.CompressFormat.PNG, 90, fos);
+            fos.close();
+        } catch (FileNotFoundException e) {
+            Log.d(TAG, "File not found: " + e.getMessage());
+        } catch (IOException e) {
+            Log.d(TAG, "Error accessing file: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Create a File for saving an image or video
+     */
+    private File getOutputMediaFile() {
+        // To be safe, you should check that the SDCard is mounted
+        // using Environment.getExternalStorageState() before doing this.
+        File mediaStorageDir = new File(Environment.getExternalStorageDirectory()
+                + "/Android/data/"
+                + getActivity().getApplicationContext().getPackageName()
+                + "/Files");
+
+        // This location works best if you want the created images to be shared
+        // between applications and persist after your app has been uninstalled.
+
+        // Create the storage directory if it does not exist
+        if (!mediaStorageDir.exists()) {
+            if (!mediaStorageDir.mkdirs()) {
+                return null;
             }
         }
+        // Create a media file name
+        String timeStamp = new SimpleDateFormat("ddMMyyyy_HHmm").format(new Date());
+        File mediaFile;
+        String mImageName = "MI_" + timeStamp + ".jpg";
+        mediaFile = new File(mediaStorageDir.getPath() + File.separator + mImageName);
+        return mediaFile;
     }
 
     private void setAutoFlash(CaptureRequest.Builder requestBuilder) {
@@ -976,14 +1049,12 @@ public class CameraFragment extends Fragment
     public class MutableInt {
         int value = 1; // note that we start at 1 since we're counting
 
-        public void increment() {
+        void increment() {
             ++value;
         }
 
-        public int get() {
+        int get() {
             return value;
         }
     }
-
-
 }

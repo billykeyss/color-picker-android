@@ -12,58 +12,84 @@
 -->
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/camera_fragment"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
+
+    <com.simplexlabs.colorpicker.components.AutoFitTextureView
+        android:id="@+id/texture"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentStart="true"
+        android:layout_alignParentTop="true" />
+
+    <com.simplexlabs.colorpicker.components.OverlayView
+        android:id="@+id/overLayView"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_above="@+id/control"
+        android:layout_alignParentEnd="true"
+        android:layout_alignParentStart="true"
+        android:layout_alignParentTop="true" />
+
+    <com.hamza.slidingsquaresloaderview.SlidingSquareLoaderView
+        android:id="@+id/loader"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        app:sslv_gap="4dp"
+        app:sslv_square_length="20dp"
+        android:layout_centerVertical="true"
+        android:layout_centerHorizontal="true" />
 
     <RelativeLayout
         android:id="@+id/control"
         android:layout_width="match_parent"
         android:layout_height="112dp"
-        android:background="@color/control_background"
         android:layout_alignParentBottom="true"
-        android:layout_alignParentStart="true">
+        android:layout_alignParentStart="true"
+        android:layout_below="@id/texture"
+        android:padding="16dp"
+        android:background="@color/control_background">
 
         <TextView
-            android:text="TextView"
+            android:id="@+id/colorNameAndHexCode"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="bottom"
-            android:id="@+id/textView"
             android:layout_alignParentBottom="true"
-            android:layout_centerHorizontal="true" />
+            android:layout_gravity="bottom" />
 
         <Button
             android:id="@+id/pause"
+            android:background="@drawable/button"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:text="@string/pause"
+            android:layout_alignParentEnd="true"
             android:layout_alignParentTop="true"
-            android:layout_alignParentEnd="true" />
+            android:layout_gravity="center"
+            android:paddingLeft="@dimen/activity_horizontal_margin"
+            android:paddingRight="@dimen/activity_horizontal_margin"
+            android:text="@string/pause" />
 
         <Button
-            android:text="Show"
+            android:id="@+id/show"
+            android:background="@drawable/button"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_alignParentBottom="true"
             android:layout_alignParentEnd="true"
-            android:id="@+id/show" />
+            android:layout_alignParentBottom="true"
+            android:layout_gravity="center"
+            android:paddingLeft="@dimen/activity_horizontal_margin"
+            android:paddingRight="@dimen/activity_horizontal_margin"
+            android:text="@string/show" />
 
         <com.simplexlabs.colorpicker.components.CircleView
-            android:layout_width="50dp"
-            android:layout_height="50dp"
             android:id="@+id/view"
-            android:layout_centerVertical="true"
-            android:layout_centerHorizontal="true"/>
+            android:layout_width="100dp"
+            android:layout_height="100dp"
+            android:layout_gravity="center_vertical"
+            android:layout_above="@+id/colorNameAndHexCode"
+            android:layout_alignParentStart="true" />
 
     </RelativeLayout>
-
-    <com.simplexlabs.colorpicker.components.AutoFitTextureView
-        android:id="@+id/texture"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_alignParentTop="true"
-        android:layout_alignParentStart="true"
-        android:layout_above="@+id/control" />
 
 </RelativeLayout>

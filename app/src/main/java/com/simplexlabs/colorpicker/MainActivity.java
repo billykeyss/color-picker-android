@@ -17,15 +17,13 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
-import java.util.Set;
 
 public class MainActivity extends Activity {
 
     private DrawerLayout mDrawerLayout;
-    private ListView mDrawerList;
 
     private ArrayList<ColorModel> colorModels;
-    private static ColorListViewAdapter adapter;
+    private ColorListViewAdapter adapter;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -42,7 +40,7 @@ public class MainActivity extends Activity {
         adapter = new ColorListViewAdapter(colorModels, getApplicationContext());
 
         mDrawerLayout = (DrawerLayout) findViewById(R.id.drawer_layout);
-        mDrawerList = (ListView) findViewById(R.id.left_drawer);
+        ListView mDrawerList = (ListView) findViewById(R.id.left_drawer);
         colorModels = new ArrayList<>();
 
         // set a custom shadow that overlays the main content when the drawer opens
@@ -63,21 +61,25 @@ public class MainActivity extends Activity {
         colorModels.clear();
         ColorModel colorModelTemp;
 
-        Set<String> colorNameSet = new HashSet();
+        HashSet colorNameSet = new HashSet();
 
         Iterator it = mostCommonColors.entrySet().iterator();
         while (it.hasNext()) {
             Map.Entry pair = (Map.Entry) it.next();
 
             colorModelTemp = (ColorModel) pair.getKey();
-            if (colorModelTemp.getColorName() != "Black" && colorNameSet.add(colorModelTemp.getColorName())) {
+            if (colorNameSet.add(colorModelTemp.getColorName())) {
                 colorModels.add((ColorModel) pair.getKey());
             }
 
             it.remove(); // avoids a ConcurrentModificationException
         }
 
-        adapter.notifyDataSetChanged();
-        mDrawerLayout.openDrawer(Gravity.RIGHT);
+        runOnUiThread(() -> {
+            adapter.notifyDataSetChanged();
+            mDrawerLayout.openDrawer(Gravity.RIGHT);
+
+            CameraFragment.resetLoading();
+        });
     }
 }

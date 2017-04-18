@@ -76,7 +76,7 @@ public class ColorListViewAdapter extends ArrayAdapter<ColorModel> implements Vi
         result.startAnimation(animation);
         lastPosition = position;
 
-        if(colorModels.getR()*0.299 + colorModels.getG()*0.587 + colorModels.getB()*0.114 < 186) {
+        if (colorModels.getR() * 0.299 + colorModels.getG() * 0.587 + colorModels.getB() * 0.114 < 186) {
             viewHolder.hexCode.setTextColor(Color.WHITE);
             viewHolder.colorName.setTextColor(Color.WHITE);
         } else {
@@ -85,8 +85,11 @@ public class ColorListViewAdapter extends ArrayAdapter<ColorModel> implements Vi
         }
 
         assert colorModels != null;
+
+        String colorName = colorModels.getColorName().replaceAll("(\\p{Ll})(\\p{Lu})", "$1 $2");
+
         viewHolder.hexCode.setText(colorModels.getHexCode().toUpperCase());
-        viewHolder.colorName.setText(colorModels.getColorName());
+        viewHolder.colorName.setText(colorName);
         viewHolder.circleView.setCircleColor(colorModels.getColor());
         viewHolder.listItemContainer.setBackgroundColor(colorModels.getColor());
         // Return the completed view to render on screen

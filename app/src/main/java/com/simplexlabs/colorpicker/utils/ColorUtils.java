@@ -216,6 +216,15 @@ public class ColorUtils {
         return getColorNameFromRgb(r, g, b);
     }
 
+    public int randomColor() {
+
+        int r = (int) (0xff * Math.random());
+        int g = (int) (0xff * Math.random());
+        int b = (int) (0xff * Math.random());
+
+        return Color.rgb(r, g, b);
+    }
+
     /**
      * SubClass of ColorUtils. In order to lookup color name
      *
